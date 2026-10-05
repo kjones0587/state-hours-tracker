@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2933">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hours">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>State Hours Tracker</title>
+<style>
+:root{
+  --bg:#f4f5f7;--card:#fff;--text:#1f2933;--muted:#6b7280;--line:#e3e6ea;
+  --il:#d9480f;--wi:#1c7ed6;--ok:#2b8a3e;--danger:#c92a2a;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#14181d;--card:#1f2630;--text:#eef1f4;--muted:#9aa5b1;--line:#2d3744;--il:#ff8a4c;--wi:#5aa9ff}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom))}
+main{max-width:520px;margin:0 auto}
+h1{font-size:20px;margin:18px 0 12px}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:24px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.status{text-align:center}
+.status .big{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;margin:4px 0}
+.status .sub{color:var(--muted)}
+.pill{display:inline-block;padding:3px 12px;border-radius:99px;color:#fff;font-weight:600;font-size:14px}
+.pill.IL{background:var(--il)}.pill.WI{background:var(--wi)}.pill.off{background:var(--muted)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+button{font:inherit;border:0;border-radius:12px;padding:16px;font-weight:700;color:#fff;cursor:pointer;min-height:56px}
+button:active{transform:scale(.98)}
+.b-il{background:var(--il)}.b-wi{background:var(--wi)}
+.b-out{grid-column:1/-1;background:var(--danger)}
+.b-ghost{background:transparent;color:var(--text);border:1px solid var(--line);padding:10px 14px;min-height:0;font-weight:600}
+.b-small{padding:6px 10px;min-height:0;font-size:14px;border-radius:8px}
+.tabs{display:flex;gap:6px;margin:0 0 10px}
+.tabs button{flex:1;background:var(--card);color:var(--muted);border:1px solid var(--line);padding:10px;min-height:0;font-weight:600}
+.tabs button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.range{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.range span{font-weight:600}
+.range button{padding:6px 12px;min-height:0;background:var(--card);color:var(--text);border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:8px 4px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-size:13px;font-weight:600}
+tr:last-child td{border-bottom:0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.dot.IL{background:var(--il)}.dot.WI{background:var(--wi)}
+.entry{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.entry:last-child{border-bottom:0}
+.entry .t{font-size:14px;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:12px}
+label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
+input,select{font:inherit;width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+dialog{border:0;border-radius:14px;padding:18px;width:min(92vw,420px);background:var(--card);color:var(--text)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.actions button{flex:1;min-width:110px}
+.b-save{background:var(--ok)}
+.note{font-size:13px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <h1>State Hours Tracker</h1>
+
+  <section class="card status">
+    <span id="pill" class="pill off">Clocked out</span>
+    <div class="big" id="clock">0:00:00</div>
+    <div class="sub" id="since">Tap a state to clock in</div>
+    <div class="btns" id="btns"></div>
+  </section>
+
+  <h2>Totals</h2>
+  <div class="tabs" id="tabs">
+    <button data-v="week" class="on">Week</button>
+    <button data-v="period">Pay period</button>
+    <button data-v="month">Month</button>
+  </div>
+  <section class="card">
+    <div class="range">
+      <button id="prev">‹</button><span id="rangeLabel"></span><button id="next">›</button>
+    </div>
+    <table>
+      <thead><tr><th>State</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead>
+      <tbody id="totals"></tbody>
+    </table>
+  </section>
+
+  <h2>Entries</h2>
+  <section class="card" id="entries"></section>
+  <div class="actions">
+    <button class="b-ghost" id="add">+ Add missed time</button>
+    <button class="b-ghost" id="settings">Settings</button>
+  </div>
+  <p class="note">All data is stored only on this phone. Use Settings → Export to back it up.</p>
+</main>
+
+<dialog id="editDlg">
+  <h3 id="editTitle" style="margin-top:0">Edit entry</h3>
+  <label>State</label>
+  <select id="eState"><option value="IL">Illinois</option><option value="WI">Wisconsin</option></select>
+  <div class="row">
+    <div><label>Start</label><input type="datetime-local" id="eStart"></div>
+    <div><label>End</label><input type="datetime-local" id="eEnd"></div>
+  </div>
+  <div class="note">Leave End empty if still on the clock.</div>
+  <div class="actions">
+    <button class="b-save" id="eSave">Save</button>
+    <button class="b-ghost" id="eCancel">Cancel</button>
+    <button class="b-ghost" id="eDelete" style="color:var(--danger)">Delete</button>
+  </div>
+</dialog>
+
+<dialog id="setDlg">
+  <h3 style="margin-top:0">Settings</h3>
+  <div class="row">
+    <div><label>Illinois rate ($/hr)</label><input type="number" step="0.01" id="rIL"></div>
+    <div><label>Wisconsin rate ($/hr)</label><input type="number" step="0.01" id="rWI"></div>
+  </div>
+  <label>Week starts on</label>
+  <select id="wkStart">
+    <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+    <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+  </select>
+  <div class="row">
+    <div><label>Pay period length (days)</label><input type="number" id="ppLen"></div>
+    <div><label>Pay period start date</label><input type="date" id="ppStart"></div>
+  </div>
+  <label>Round to nearest (minutes, 0 = none)</label>
+  <input type="number" id="round" min="0">
+  <div class="actions">
+    <button class="b-save" id="sSave">Save</button>
+    <button class="b-ghost" id="sCancel">Close</button>
+  </div>
+  <h2>Backup</h2>
+  <div class="actions">
+    <button class="b-ghost" id="expCsv">Export CSV</button>
+    <button class="b-ghost" id="expJson">Backup (JSON)</button>
+    <button class="b-ghost" id="impJson">Restore</button>
+  </div>
+  <input type="file" id="file" accept="application/json" hidden>
+</dialog>
+
+<script>
+const KEY = 'stateHours.v1';
+const NAMES = {IL:'Illinois', WI:'Wisconsin'};
+const $ = id => document.getElementById(id);
+
+let db = load();
+let view = 'week', offset = 0;
+
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(d && d.entries) return d;
+  }catch(e){}
+  return {
+    entries: [],
+    settings: {rIL:0, rWI:0, wkStart:1, ppLen:14, ppStart:'', round:0}
+  };
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ alert('Could not save — storage may be full or blocked.'); } }
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const active = () => db.entries.find(e => !e.end);
+
+/* ---------- clocking ---------- */
+function clockIn(state){
+  const now = Date.now(), cur = active();
+  if(cur){
+    if(cur.state === state) return;
+    cur.end = now;
+  }
+  db.entries.push({id:uid(), state, start:now, end:null});
+  save(); render();
+}
+function clockOut(){
+  const cur = active();
+  if(!cur) return;
+  cur.end = Date.now();
+  save(); render();
+}
+
+/* ---------- helpers ---------- */
+const pad = n => String(n).padStart(2,'0');
+function hms(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  return `${Math.floor(s/3600)}:${pad(Math.floor(s%3600/60))}:${pad(s%60)}`;
+}
+function fmtHours(ms){
+  const r = db.settings.round;
+  let min = ms/60000;
+  if(r > 0) min = Math.round(min/r)*r;
+  return min/60;
+}
+const money = n => '$' + n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+function fmtDT(ms){
+  return new Date(ms).toLocaleString([], {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+function toLocalInput(ms){
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d,n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+
+/* ---------- ranges ---------- */
+function getRange(){
+  const s = db.settings, today = startOfDay(new Date());
+  let start, end, label;
+  if(view === 'week'){
+    const diff = (today.getDay() - s.wkStart + 7) % 7;
+    start = addDays(today, -diff + offset*7);
+    end = addDays(start, 7);
+  }else if(view === 'period'){
+    const len = Math.max(1, +s.ppLen || 14);
+    const anchor = s.ppStart ? startOfDay(new Date(s.ppStart + 'T00:00')) : addDays(today, -((today.getDay() - s.wkStart + 7) % 7));
+    const days = Math.round((today - anchor)/864e5);
+    const idx = Math.floor(days/len) + offset;
+    start = addDays(anchor, idx*len);
+    end = addDays(start, len);
+  }else{
+    start = new Date(today.getFullYear(), today.getMonth()+offset, 1);
+    end = new Date(start.getFullYear(), start.getMonth()+1, 1);
+  }
+  const f = d => d.toLocaleDateString([], {month:'short', day:'numeric'});
+  label = view === 'month'
+    ? start.toLocaleDateString([], {month:'long', year:'numeric'})
+    : `${f(start)} – ${f(addDays(end,-1))}`;
+  return {start:+start, end:+end, label};
+}
+
+// Clip entries to range so time that straddles a boundary is split correctly.
+function sumByState(start, end){
+  const out = {IL:0, WI:0}, now = Date.now();
+  for(const e of db.entries){
+    const s = Math.max(e.start, start), f = Math.min(e.end ?? now, end);
+    if(f > s) out[e.state] += f - s;
+  }
+  return out;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const cur = active();
+  const pill = $('pill');
+  pill.className = 'pill ' + (cur ? cur.state : 'off');
+  pill.textContent = cur ? 'Working in ' + NAMES[cur.state] : 'Clocked out';
+  $('since').textContent = cur ? 'Since ' + fmtDT(cur.start) : 'Tap a state to clock in';
+
+  $('btns').innerHTML = cur
+    ? `<button class="b-il" data-s="IL">${cur.state==='IL'?'● ':'Switch to '}Illinois</button>
+       <button class="b-wi" data-s="WI">${cur.state==='WI'?'● ':'Switch to '}Wisconsin</button>
+       <button class="b-out" data-out="1">Clock out</button>`
+    : `<button class="b-il" data-s="IL">Clock in<br>Illinois</button>
+       <button class="b-wi" data-s="WI">Clock in<br>Wisconsin</button>`;
+
+  tick();
+
+  const r = getRange();
+  $('rangeLabel').textContent = r.label;
+  const t = sumByState(r.start, r.end), rates = {IL:+db.settings.rIL||0, WI:+db.settings.rWI||0};
+  let totH = 0, totP = 0, rows = '';
+  for(const st of ['IL','WI']){
+    const h = fmtHours(t[st]), p = h*rates[st];
+    totH += h; totP += p;
+    rows += `<tr><td><span class="dot ${st}"></span>${NAMES[st]}</td><td>${h.toFixed(2)}</td><td>${rates[st]?money(rates[st]):'—'}</td><td>${rates[st]?money(p):'—'}</td></tr>`;
+  }
+  rows += `<tr><td><b>Total</b></td><td><b>${totH.toFixed(2)}</b></td><td></td><td><b>${(rates.IL||rates.WI)?money(totP):'—'}</b></td></tr>`;
+  $('totals').innerHTML = rows;
+
+  const list = db.entries.filter(e => e.start < r.end && (e.end ?? Infinity) > r.start).sort((a,b) => b.start - a.start);
+  $('entries').innerHTML = list.length ? list.map(e => {
+    const dur = (e.end ?? Date.now()) - e.start;
+    return `<div class="entry"><div><span class="dot ${e.state}"></span><b>${NAMES[e.state]}</b> · ${fmtHours(dur).toFixed(2)} h
+      <div class="t">${fmtDT(e.start)} → ${e.end ? fmtDT(e.end) : 'now'}</div></div>
+      <button class="b-ghost b-small" data-edit="${e.id}">Edit</button></div>`;
+  }).join('') : '<div class="empty">No entries in this range.</div>';
+}
+function tick(){
+  const cur = active();
+  $('clock').textContent = cur ? hms(Date.now() - cur.start) : '0:00:00';
+}
+setInterval(tick, 1000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden) render(); });
+
+/* ---------- events ---------- */
+$('btns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.out) clockOut(); else clockIn(b.dataset.s);
+});
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  view = b.dataset.v; offset = 0;
+  [...$('tabs').children].forEach(c => c.classList.toggle('on', c === b));
+  render();
+});
+$('prev').onclick = () => { offset--; render(); };
+$('next').onclick = () => { offset++; render(); };
+
+/* edit dialog */
+let editing = null;
+function openEdit(entry){
+  editing = entry;
+  $('editTitle').textContent = entry.id ? 'Edit entry' : 'Add missed time';
+  $('eState').value = entry.state;
+  $('eStart').value = toLocalInput(entry.start);
+  $('eEnd').value = entry.end ? toLocalInput(entry.end) : '';
+  $('eDelete').style.display = entry.id ? '' : 'none';
+  $('editDlg').showModal();
+}
+$('entries').addEventListener('click', e => {
+  const b = e.target.closest('[data-edit]'); if(!b) return;
+  openEdit(db.entries.find(x => x.id === b.dataset.edit));
+});
+$('add').onclick = () => {
+  const now = Date.now();
+  openEdit({state:'IL', start:now - 3600e3, end:now});
+};
+$('eCancel').onclick = () => $('editDlg').close();
+$('eSave').onclick = () => {
+  const start = new Date($('eStart').value).getTime();
+  const end = $('eEnd').value ? new Date($('eEnd').value).getTime() : null;
+  if(isNaN(start)) return alert('Please enter a start time.');
+  if(end !== null && end <= start) return alert('End must be after start.');
+  if(end === null && db.entries.some(x => !x.end && x.id !== editing.id)) return alert('You are already clocked in. Clock out first, or set an end time.');
+  editing.state = $('eState').value; editing.start = start; editing.end = end;
+  if(!editing.id){ editing.id = uid(); db.entries.push(editing); }
+  save(); $('editDlg').close(); render();
+};
+$('eDelete').onclick = () => {
+  if(!confirm('Delete this entry?')) return;
+  db.entries = db.entries.filter(x => x.id !== editing.id);
+  save(); $('editDlg').close(); render();
+};
+
+/* settings dialog */
+$('settings').onclick = () => {
+  const s = db.settings;
+  $('rIL').value = s.rIL || ''; $('rWI').value = s.rWI || '';
+  $('wkStart').value = s.wkStart; $('ppLen').value = s.ppLen; $('ppStart').value = s.ppStart; $('round').value = s.round;
+  $('setDlg').showModal();
+};
+$('sCancel').onclick = () => $('setDlg').close();
+$('sSave').onclick = () => {
+  db.settings = {
+    rIL:+$('rIL').value||0, rWI:+$('rWI').value||0, wkStart:+$('wkStart').value,
+    ppLen:+$('ppLen').value||14, ppStart:$('ppStart').value, round:Math.max(0,+$('round').value||0)
+  };
+  save(); $('setDlg').close(); render();
+};
+
+/* export / import */
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('expCsv').onclick = () => {
+  const rows = [['State','Start','End','Hours']];
+  [...db.entries].sort((a,b) => a.start-b.start).forEach(e => {
+    rows.push([NAMES[e.state], new Date(e.start).toISOString(), e.end ? new Date(e.end).toISOString() : '', e.end ? ((e.end-e.start)/36e5).toFixed(2) : '']);
+  });
+  download('hours.csv', rows.map(r => r.join(',')).join('\n'), 'text/csv');
+};
+$('expJson').onclick = () => download('hours-backup.json', JSON.stringify(db), 'application/json');
+$('impJson').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(!Array.isArray(d.entries) || !d.settings) throw 0;
+    if(!confirm('Replace all current data with this backup?')) return;
+    db = d; save(); $('setDlg').close(); render();
+  }catch(_){ alert('That file is not a valid backup.'); }
+  e.target.value = '';
+};
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+render();
+</script>
+</body>
+</html>
