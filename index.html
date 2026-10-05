@@ -13,7 +13,7 @@
 <style>
 :root{
   --bg:#f4f5f7;--card:#fff;--text:#1f2933;--muted:#6b7280;--line:#e3e6ea;
-  --il:#d9480f;--wi:#1c7ed6;--ok:#2b8a3e;--danger:#c92a2a;
+  --il:#d9480f;--wi:#1c7ed6;--ok:#2b8a3e;--danger:#c92a2a;--warn:#f08c00;
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#14181d;--card:#1f2630;--text:#eef1f4;--muted:#9aa5b1;--line:#2d3744;--il:#ff8a4c;--wi:#5aa9ff}
@@ -57,17 +57,29 @@ tr:last-child td{border-bottom:0}
 label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 input,select{font:inherit;width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-dialog{border:0;border-radius:14px;padding:18px;width:min(92vw,420px);background:var(--card);color:var(--text)}
+dialog{border:0;border-radius:14px;padding:18px;width:min(92vw,420px);background:var(--card);color:var(--text);max-height:90vh;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.5)}
 .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .actions button{flex:1;min-width:110px}
 .b-save{background:var(--ok)}
 .note{font-size:13px;color:var(--muted);margin-top:10px}
+.banner{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:15px}
+.banner.warn{background:rgba(240,140,0,.15);border:1px solid var(--warn)}
+.banner.info{background:rgba(28,126,214,.12);border:1px solid var(--wi)}
+.insights{margin:0;padding-left:18px}
+.insights li{margin:4px 0}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;padding:6px 0}
+.ot{color:var(--warn);font-size:13px}
+.check{display:flex;gap:10px;align-items:center;margin-top:12px;color:var(--text);font-size:16px}
+.check input{width:auto}
 </style>
 </head>
 <body>
 <main>
   <h1>State Hours Tracker</h1>
+
+  <div id="banner"></div>
 
   <section class="card status">
     <span id="pill" class="pill off">Clocked out</span>
@@ -90,6 +102,19 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
       <thead><tr><th>State</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead>
       <tbody id="totals"></tbody>
     </table>
+    <div class="ot" id="otNote"></div>
+    <details>
+      <summary>Quick insights</summary>
+      <ul class="insights" id="insights"></ul>
+    </details>
+    <details>
+      <summary>Day by day</summary>
+      <table>
+        <thead><tr><th>Day</th><th>IL</th><th>WI</th><th>Total</th></tr></thead>
+        <tbody id="days"></tbody>
+      </table>
+    </details>
+    <div class="actions"><button class="b-ghost" id="copy">Copy summary to text</button></div>
   </section>
 
   <h2>Entries</h2>
@@ -98,7 +123,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
     <button class="b-ghost" id="add">+ Add missed time</button>
     <button class="b-ghost" id="settings">Settings</button>
   </div>
-  <p class="note">All data is stored only on this phone. Use Settings → Export to back it up.</p>
+  <p class="note">All data is stored only on this phone. Use Settings → Backup now and then to keep it safe.</p>
 </main>
 
 <dialog id="editDlg">
@@ -110,6 +135,8 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
     <div><label>End</label><input type="datetime-local" id="eEnd"></div>
   </div>
   <div class="note">Leave End empty if still on the clock.</div>
+  <label>Note (job site, optional)</label>
+  <input type="text" id="eNote" maxlength="80" placeholder="e.g. Kenosha – driveway pour">
   <div class="actions">
     <button class="b-save" id="eSave">Save</button>
     <button class="b-ghost" id="eCancel">Cancel</button>
@@ -120,20 +147,29 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <dialog id="setDlg">
   <h3 style="margin-top:0">Settings</h3>
   <div class="row">
-    <div><label>Illinois rate ($/hr)</label><input type="number" step="0.01" id="rIL"></div>
-    <div><label>Wisconsin rate ($/hr)</label><input type="number" step="0.01" id="rWI"></div>
+    <div><label>Illinois rate ($/hr)</label><input type="number" step="0.01" inputmode="decimal" id="rIL"></div>
+    <div><label>Wisconsin rate ($/hr)</label><input type="number" step="0.01" inputmode="decimal" id="rWI"></div>
   </div>
+  <label class="check"><input type="checkbox" id="otOn"> Overtime after 40 hours a week (both states combined)</label>
+  <div id="otRow" class="row">
+    <div><label>Overtime multiplier</label><input type="number" step="0.05" inputmode="decimal" id="otMult"></div>
+    <div></div>
+  </div>
+  <div class="note">Overtime is applied to whichever state's rate the extra hours were worked in. Rules vary by employer, so treat the pay figures as estimates.</div>
   <label>Week starts on</label>
   <select id="wkStart">
     <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
     <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
   </select>
-  <div class="row">
-    <div><label>Pay period length (days)</label><input type="number" id="ppLen"></div>
-    <div><label>Pay period start date</label><input type="date" id="ppStart"></div>
-  </div>
-  <label>Round to nearest (minutes, 0 = none)</label>
-  <input type="number" id="round" min="0">
+  <details>
+    <summary>More options</summary>
+    <div class="row">
+      <div><label>Pay period length (days)</label><input type="number" inputmode="numeric" id="ppLen"></div>
+      <div><label>Pay period start date</label><input type="date" id="ppStart"></div>
+    </div>
+    <label>Round time to nearest (minutes, 0 = none)</label>
+    <input type="number" inputmode="numeric" id="round" min="0">
+  </details>
   <div class="actions">
     <button class="b-save" id="sSave">Save</button>
     <button class="b-ghost" id="sCancel">Close</button>
@@ -150,6 +186,8 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <script>
 const KEY = 'stateHours.v1';
 const NAMES = {IL:'Illinois', WI:'Wisconsin'};
+const DEFAULTS = {rIL:0, rWI:0, wkStart:1, ppLen:14, ppStart:'', round:0, ot:false, otMult:1.5};
+const LONG_SHIFT_HOURS = 14;
 const $ = id => document.getElementById(id);
 
 let db = load();
@@ -158,12 +196,9 @@ let view = 'week', offset = 0;
 function load(){
   try{
     const d = JSON.parse(localStorage.getItem(KEY));
-    if(d && d.entries) return d;
+    if(d && Array.isArray(d.entries)) return {entries:d.entries, settings:{...DEFAULTS, ...d.settings}};
   }catch(e){}
-  return {
-    entries: [],
-    settings: {rIL:0, rWI:0, wkStart:1, ppLen:14, ppStart:'', round:0}
-  };
+  return {entries:[], settings:{...DEFAULTS}};
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ alert('Could not save — storage may be full or blocked.'); } }
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -174,6 +209,8 @@ function clockIn(state){
   const now = Date.now(), cur = active();
   if(cur){
     if(cur.state === state) return;
+    // Switched within a minute? Treat it as a mis-tap and just correct the state.
+    if(now - cur.start < 60000){ cur.state = state; save(); render(); return; }
     cur.end = now;
   }
   db.entries.push({id:uid(), state, start:now, end:null});
@@ -192,12 +229,8 @@ function hms(ms){
   const s = Math.max(0, Math.floor(ms/1000));
   return `${Math.floor(s/3600)}:${pad(Math.floor(s%3600/60))}:${pad(s%60)}`;
 }
-function fmtHours(ms){
-  const r = db.settings.round;
-  let min = ms/60000;
-  if(r > 0) min = Math.round(min/r)*r;
-  return min/60;
-}
+const roundMin = m => { const r = +db.settings.round || 0; return r > 0 ? Math.round(m/r)*r : m; };
+const hoursOf = ms => roundMin(ms/60000)/60;
 const money = n => '$' + n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 function fmtDT(ms){
   return new Date(ms).toLocaleString([], {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
@@ -208,41 +241,66 @@ function toLocalInput(ms){
 }
 function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function addDays(d,n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function weekStartOf(ms){
+  const d = startOfDay(new Date(ms));
+  return addDays(d, -((d.getDay() - db.settings.wkStart + 7) % 7));
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- ranges ---------- */
-function getRange(){
+function getRange(off = offset){
   const s = db.settings, today = startOfDay(new Date());
-  let start, end, label;
+  let start, end;
   if(view === 'week'){
-    const diff = (today.getDay() - s.wkStart + 7) % 7;
-    start = addDays(today, -diff + offset*7);
+    start = addDays(weekStartOf(+today), off*7);
     end = addDays(start, 7);
   }else if(view === 'period'){
     const len = Math.max(1, +s.ppLen || 14);
-    const anchor = s.ppStart ? startOfDay(new Date(s.ppStart + 'T00:00')) : addDays(today, -((today.getDay() - s.wkStart + 7) % 7));
-    const days = Math.round((today - anchor)/864e5);
-    const idx = Math.floor(days/len) + offset;
+    const anchor = s.ppStart ? startOfDay(new Date(s.ppStart + 'T00:00')) : weekStartOf(+today);
+    const idx = Math.floor(Math.round((today - anchor)/864e5)/len) + off;
     start = addDays(anchor, idx*len);
     end = addDays(start, len);
   }else{
-    start = new Date(today.getFullYear(), today.getMonth()+offset, 1);
+    start = new Date(today.getFullYear(), today.getMonth()+off, 1);
     end = new Date(start.getFullYear(), start.getMonth()+1, 1);
   }
   const f = d => d.toLocaleDateString([], {month:'short', day:'numeric'});
-  label = view === 'month'
+  const label = view === 'month'
     ? start.toLocaleDateString([], {month:'long', year:'numeric'})
     : `${f(start)} – ${f(addDays(end,-1))}`;
   return {start:+start, end:+end, label};
 }
 
-// Clip entries to range so time that straddles a boundary is split correctly.
-function sumByState(start, end){
-  const out = {IL:0, WI:0}, now = Date.now();
-  for(const e of db.entries){
-    const s = Math.max(e.start, start), f = Math.min(e.end ?? now, end);
-    if(f > s) out[e.state] += f - s;
+/* Hours and estimated pay per state inside [start,end).
+   Overtime is figured per calendar work-week (both states combined), in the order the hours were worked. */
+function compute(start, end){
+  const s = db.settings, now = Date.now();
+  const rates = {IL:+s.rIL||0, WI:+s.rWI||0}, mult = +s.otMult || 1.5;
+  const out = {IL:{h:0, ot:0, pay:0}, WI:{h:0, ot:0, pay:0}};
+  const days = {};
+  for(let wk = weekStartOf(start); +wk < end; wk = addDays(wk, 7)){
+    const wS = +wk, wE = +addDays(wk, 7), segs = [];
+    for(const e of db.entries){
+      const a = Math.max(e.start, wS), b = Math.min(e.end ?? now, wE);
+      if(b > a) segs.push({st:e.state, a, b});
+    }
+    segs.sort((x, y) => x.a - y.a);
+    let cum = 0;
+    for(const g of segs){
+      const h = hoursOf(g.b - g.a);
+      const ia = Math.max(g.a, start), ib = Math.min(g.b, end);
+      const hin = ib > ia ? hoursOf(ib - ia) : 0;
+      const before = cum; cum += h;
+      if(hin <= 0 || h <= 0) continue;
+      const otFull = s.ot ? Math.max(0, cum-40) - Math.max(0, before-40) : 0;
+      const ot = otFull * Math.min(1, hin/h), reg = hin - ot;
+      const o = out[g.st];
+      o.h += hin; o.ot += ot; o.pay += reg*rates[g.st] + ot*rates[g.st]*mult;
+      const key = +startOfDay(new Date(ia));
+      (days[key] ||= {IL:0, WI:0})[g.st] += hin;
+    }
   }
-  return out;
+  return {out, days, rates};
 }
 
 /* ---------- render ---------- */
@@ -260,28 +318,75 @@ function render(){
     : `<button class="b-il" data-s="IL">Clock in<br>Illinois</button>
        <button class="b-wi" data-s="WI">Clock in<br>Wisconsin</button>`;
 
+  renderBanner(cur);
   tick();
 
   const r = getRange();
   $('rangeLabel').textContent = r.label;
-  const t = sumByState(r.start, r.end), rates = {IL:+db.settings.rIL||0, WI:+db.settings.rWI||0};
-  let totH = 0, totP = 0, rows = '';
+  const {out, days, rates} = compute(r.start, r.end);
+  const anyRate = rates.IL || rates.WI;
+  let totH = 0, totP = 0, totOT = 0, rows = '';
   for(const st of ['IL','WI']){
-    const h = fmtHours(t[st]), p = h*rates[st];
-    totH += h; totP += p;
-    rows += `<tr><td><span class="dot ${st}"></span>${NAMES[st]}</td><td>${h.toFixed(2)}</td><td>${rates[st]?money(rates[st]):'—'}</td><td>${rates[st]?money(p):'—'}</td></tr>`;
+    const o = out[st];
+    totH += o.h; totP += o.pay; totOT += o.ot;
+    rows += `<tr><td><span class="dot ${st}"></span>${NAMES[st]}</td><td>${o.h.toFixed(2)}</td><td>${rates[st]?money(rates[st]):'—'}</td><td>${rates[st]?money(o.pay):'—'}</td></tr>`;
   }
-  rows += `<tr><td><b>Total</b></td><td><b>${totH.toFixed(2)}</b></td><td></td><td><b>${(rates.IL||rates.WI)?money(totP):'—'}</b></td></tr>`;
+  rows += `<tr><td><b>Total</b></td><td><b>${totH.toFixed(2)}</b></td><td></td><td><b>${anyRate?money(totP):'—'}</b></td></tr>`;
   $('totals').innerHTML = rows;
+  $('otNote').textContent = totOT > 0.005 ? `Includes ${totOT.toFixed(2)} overtime hours at ${db.settings.otMult}×` : '';
+
+  renderInsights(r, out, totH, totOT, days);
+  renderDays(days);
 
   const list = db.entries.filter(e => e.start < r.end && (e.end ?? Infinity) > r.start).sort((a,b) => b.start - a.start);
   $('entries').innerHTML = list.length ? list.map(e => {
     const dur = (e.end ?? Date.now()) - e.start;
-    return `<div class="entry"><div><span class="dot ${e.state}"></span><b>${NAMES[e.state]}</b> · ${fmtHours(dur).toFixed(2)} h
-      <div class="t">${fmtDT(e.start)} → ${e.end ? fmtDT(e.end) : 'now'}</div></div>
+    return `<div class="entry"><div><span class="dot ${e.state}"></span><b>${NAMES[e.state]}</b> · ${hoursOf(dur).toFixed(2)} h
+      <div class="t">${fmtDT(e.start)} → ${e.end ? fmtDT(e.end) : 'now'}${e.note ? '<br>' + esc(e.note) : ''}</div></div>
       <button class="b-ghost b-small" data-edit="${e.id}">Edit</button></div>`;
   }).join('') : '<div class="empty">No entries in this range.</div>';
 }
+
+function renderBanner(cur){
+  const b = $('banner');
+  if(cur && Date.now() - cur.start > LONG_SHIFT_HOURS*36e5){
+    b.innerHTML = `<div class="banner warn">You've been clocked in for over ${LONG_SHIFT_HOURS} hours. Forgot to clock out? Tap <b>Edit</b> on the entry below to fix the end time.</div>`;
+  }else if(!+db.settings.rIL && !+db.settings.rWI){
+    b.innerHTML = `<div class="banner info">Tip: open <b>Settings</b> and enter your hourly rates to see pay estimates.</div>`;
+  }else b.innerHTML = '';
+}
+
+function renderInsights(r, out, totH, totOT, days){
+  const el = $('insights'), rates = {IL:+db.settings.rIL||0, WI:+db.settings.rWI||0};
+  if(totH <= 0){ el.innerHTML = '<li>No hours logged in this range yet.</li>'; return; }
+  const L = [];
+  const pctIL = Math.round(out.IL.h/totH*100);
+  L.push(`${totH.toFixed(1)} hours total: ${pctIL}% in Illinois, ${100-pctIL}% in Wisconsin.`);
+  if(rates.IL && rates.WI && out.IL.h > 0 && rates.IL !== rates.WI){
+    const diff = (rates.IL - rates.WI) * out.IL.h;
+    L.push(`Your Illinois hours paid about ${money(Math.abs(diff))} ${diff > 0 ? 'more' : 'less'} than the same hours at the Wisconsin rate.`);
+  }
+  if(totOT > 0.005) L.push(`${totOT.toFixed(1)} of those hours were overtime.`);
+  const n = Object.keys(days).length;
+  if(n) L.push(`Worked ${n} day${n===1?'':'s'}, averaging ${(totH/n).toFixed(1)} hours per day.`);
+  const prev = getRange(offset - 1), pc = compute(prev.start, prev.end).out;
+  const prevH = pc.IL.h + pc.WI.h;
+  if(prevH > 0){
+    const d = totH - prevH;
+    L.push(`${Math.abs(d) < 0.05 ? 'Same hours as' : Math.abs(d).toFixed(1) + ' hours ' + (d > 0 ? 'more than' : 'fewer than')} the previous ${view === 'period' ? 'pay period' : view}.`);
+  }
+  el.innerHTML = L.map(x => `<li>${x}</li>`).join('');
+}
+
+function renderDays(days){
+  const keys = Object.keys(days).map(Number).sort((a,b) => a-b);
+  $('days').innerHTML = keys.length ? keys.map(k => {
+    const d = days[k];
+    return `<tr><td>${new Date(k).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</td>
+      <td>${d.IL ? d.IL.toFixed(2) : '–'}</td><td>${d.WI ? d.WI.toFixed(2) : '–'}</td><td>${(d.IL+d.WI).toFixed(2)}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">Nothing yet.</td></tr>';
+}
+
 function tick(){
   const cur = active();
   $('clock').textContent = cur ? hms(Date.now() - cur.start) : '0:00:00';
@@ -303,6 +408,16 @@ $('tabs').addEventListener('click', e => {
 $('prev').onclick = () => { offset--; render(); };
 $('next').onclick = () => { offset++; render(); };
 
+$('copy').onclick = async () => {
+  const r = getRange(), {out, rates} = compute(r.start, r.end), anyRate = rates.IL || rates.WI;
+  const tot = out.IL.h + out.WI.h, pay = out.IL.pay + out.WI.pay;
+  let t = `Hours ${r.label}\nIllinois: ${out.IL.h.toFixed(2)} h\nWisconsin: ${out.WI.h.toFixed(2)} h\nTotal: ${tot.toFixed(2)} h`;
+  if(out.IL.ot + out.WI.ot > 0.005) t += ` (incl. ${(out.IL.ot+out.WI.ot).toFixed(2)} OT)`;
+  if(anyRate) t += `\nEstimated pay: ${money(pay)}`;
+  try{ await navigator.clipboard.writeText(t); $('copy').textContent = 'Copied ✓'; setTimeout(() => $('copy').textContent = 'Copy summary to text', 1800); }
+  catch(e){ prompt('Copy this summary:', t); }
+};
+
 /* edit dialog */
 let editing = null;
 function openEdit(entry){
@@ -311,6 +426,7 @@ function openEdit(entry){
   $('eState').value = entry.state;
   $('eStart').value = toLocalInput(entry.start);
   $('eEnd').value = entry.end ? toLocalInput(entry.end) : '';
+  $('eNote').value = entry.note || '';
   $('eDelete').style.display = entry.id ? '' : 'none';
   $('editDlg').showModal();
 }
@@ -330,6 +446,7 @@ $('eSave').onclick = () => {
   if(end !== null && end <= start) return alert('End must be after start.');
   if(end === null && db.entries.some(x => !x.end && x.id !== editing.id)) return alert('You are already clocked in. Clock out first, or set an end time.');
   editing.state = $('eState').value; editing.start = start; editing.end = end;
+  editing.note = $('eNote').value.trim();
   if(!editing.id){ editing.id = uid(); db.entries.push(editing); }
   save(); $('editDlg').close(); render();
 };
@@ -340,9 +457,12 @@ $('eDelete').onclick = () => {
 };
 
 /* settings dialog */
+const syncOt = () => { $('otRow').style.display = $('otOn').checked ? '' : 'none'; };
+$('otOn').onchange = syncOt;
 $('settings').onclick = () => {
   const s = db.settings;
   $('rIL').value = s.rIL || ''; $('rWI').value = s.rWI || '';
+  $('otOn').checked = !!s.ot; $('otMult').value = s.otMult; syncOt();
   $('wkStart').value = s.wkStart; $('ppLen').value = s.ppLen; $('ppStart').value = s.ppStart; $('round').value = s.round;
   $('setDlg').showModal();
 };
@@ -350,7 +470,8 @@ $('sCancel').onclick = () => $('setDlg').close();
 $('sSave').onclick = () => {
   db.settings = {
     rIL:+$('rIL').value||0, rWI:+$('rWI').value||0, wkStart:+$('wkStart').value,
-    ppLen:+$('ppLen').value||14, ppStart:$('ppStart').value, round:Math.max(0,+$('round').value||0)
+    ppLen:+$('ppLen').value||14, ppStart:$('ppStart').value, round:Math.max(0,+$('round').value||0),
+    ot:$('otOn').checked, otMult:+$('otMult').value||1.5
   };
   save(); $('setDlg').close(); render();
 };
@@ -362,12 +483,13 @@ function download(name, text, type){
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+const csvCell = v => /[",\n]/.test(v) ? '"' + String(v).replace(/"/g,'""') + '"' : v;
 $('expCsv').onclick = () => {
-  const rows = [['State','Start','End','Hours']];
+  const rows = [['State','Start','End','Hours','Note']];
   [...db.entries].sort((a,b) => a.start-b.start).forEach(e => {
-    rows.push([NAMES[e.state], new Date(e.start).toISOString(), e.end ? new Date(e.end).toISOString() : '', e.end ? ((e.end-e.start)/36e5).toFixed(2) : '']);
+    rows.push([NAMES[e.state], new Date(e.start).toISOString(), e.end ? new Date(e.end).toISOString() : '', e.end ? ((e.end-e.start)/36e5).toFixed(2) : '', e.note || '']);
   });
-  download('hours.csv', rows.map(r => r.join(',')).join('\n'), 'text/csv');
+  download('hours.csv', rows.map(r => r.map(csvCell).join(',')).join('\n'), 'text/csv');
 };
 $('expJson').onclick = () => download('hours-backup.json', JSON.stringify(db), 'application/json');
 $('impJson').onclick = () => $('file').click();
@@ -377,7 +499,7 @@ $('file').onchange = async e => {
     const d = JSON.parse(await f.text());
     if(!Array.isArray(d.entries) || !d.settings) throw 0;
     if(!confirm('Replace all current data with this backup?')) return;
-    db = d; save(); $('setDlg').close(); render();
+    db = {entries:d.entries, settings:{...DEFAULTS, ...d.settings}}; save(); $('setDlg').close(); render();
   }catch(_){ alert('That file is not a valid backup.'); }
   e.target.value = '';
 };
