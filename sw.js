@@ -1,5 +1,5 @@
 // Cache the app shell so it opens instantly and works offline (e.g. on a job site with no signal).
-const CACHE = 'state-hours-v3';
+const CACHE = 'state-hours-v4';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
